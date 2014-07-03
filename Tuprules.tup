@@ -18,7 +18,7 @@ else
 LD = $(CXX)
 endif
 
-CCFLAGS = -g -fsanitize=undefined,address -Wall -Wextra -pedantic -Werror -pthread -D_GNU_SOURCE @(CCFLAGS)
+CCFLAGS = -g -Wall -Wextra -pedantic -Werror -pthread -D_GNU_SOURCE @(CCFLAGS)
 
 CXXFLAGS = $(CCFLAGS) -std=c++11 @(CXXFLAGS)
 
@@ -33,7 +33,7 @@ LDFLAGS = @(LDFLAGS)
 TOP=$(TUP_CWD)
 
 #CXXFLAGS +=
-LDFLAGS += -fsanitize=undefined,address -luv -lcares
+LDFLAGS += -luv -lcares
 
 !cxx = |> ^o C++ %f^ $(CXX) $(CXXFLAGS) -c %f -o %o |> %B.o | $(TOP)/<objs>
 !cc = |> ^o C %f^ $(CC) $(CFLAGS) -c %f -o %o |> %B.o | $(TOP)/<objs>
