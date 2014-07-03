@@ -1,0 +1,40 @@
+.gitignore
+
+ifdef CXX
+CXX = @(CXX)
+else
+CXX = clang++
+endif
+
+ifdef CC
+CC = @(CC)
+else
+CC = clang
+endif
+
+ifdef LD
+LD = @(LD)
+else
+LD = $(CXX)
+endif
+
+CCFLAGS = -g -Wall -Wextra -pedantic -Werror -pthread -D_GNU_SOURCE @(CCFLAGS)
+
+CXXFLAGS = $(CCFLAGS) -std=c++11 @(CXXFLAGS)
+
+ifeq ($(CXX),clang++)
+  CXXFLAGS += -fcolor-diagnostics
+endif
+
+CFLAGS = $(CCFLAGS) -std=c99 @(CFLAGS)
+
+LDFLAGS = @(LDFLAGS)
+
+TOP=$(TUP_CWD)
+
+#CXXFLAGS +=
+LDFLAGS += -luv -lcares
+
+!cxx = |> ^o C++ %f^ $(CXX) $(CXXFLAGS) -c %f -o %o |> %B.o | $(TOP)/<objs>
+!cc = |> ^o C %f^ $(CC) $(CFLAGS) -c %f -o %o |> %B.o | $(TOP)/<objs>
+!ld = | <objs> |> ^o LINK %o^ $(LD) %<objs> $(LDFLAGS) -o %o |>

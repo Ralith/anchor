@@ -1,0 +1,5 @@
+include_rules
+
+: foreach http-parser/http_parser.c |> !cc |>
+: foreach *.cpp |> !cxx |>
+: *.o |> !ld |> downloader
