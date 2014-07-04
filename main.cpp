@@ -19,17 +19,18 @@
 int main(int argc, char **argv) {
   if(argc < 3) {
     fprintf(stderr, "FAIL: Insufficient arguments\n");
+    return 1;
   }
 
   Client client;
   if(int err = client.ares.start()) {
     fprintf(stderr, "FATAL: c-ares: %s\n", ares_strerror(err));
-    return 1;
+    return 2;
   }
 
   if(int err = client.dns.start()) {
     fprintf(stderr, "FATAL: c-ares: %s\n", ares_strerror(err));
-    return 2;
+    return 3;
   }
 
   client.file_name = argv[1];
