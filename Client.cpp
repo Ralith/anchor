@@ -252,7 +252,8 @@ void Client::progress(uint64_t bytes) {
   printf("\x1B[0G" "\x1B[K" "%.1f%%", 100.f * (double)stats.bytes / (double)file_size);
 
   {
-    auto dt = now - stats.start_time;
+    uint64_t dt = now - stats.start_time;
+    printf(" - %" PRIu64 "s", dt / 1000);
     if(dt != 0) {
       printf(" - ");
       print_bytes(stats.bytes / dt * 1000);
