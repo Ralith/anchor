@@ -2,6 +2,7 @@
 
 #include <cerrno>
 #include <cstring>
+#include <cmath>
 
 #include <unistd.h>
 #include <sys/mman.h>
@@ -81,6 +82,20 @@ void query6_cb(void *arg, int status, int timeouts, unsigned char *abuf, int ale
   res.client.connections.emplace_back(res.client, res.host + ":" + std::to_string(res.port), res.path);
   uv_tcp_init(&res.client.loop, &res.client.connections.back().handle);
   res.client.connections.back().connect(*reinterpret_cast<in6_addr*>(&addrs[0].ip6addr), res.port);
+}
+void print_bytes(uint64_t bytes) {
+  uint8_t exponent = log(bytes) / log(1024);
+  if(exponent == 0) {
+    printf("%" PRIu64 "B", bytes);
+    return;
+  }
+  const static char abbrevs[] = "KMGTPE";
+  if(exponent - 1 >= elementsof(abbrevs)) {
+    printf("%.1fEiB", bytes / pow(1024, 6));
+    return;
+  }
+  char abbrev = abbrevs[exponent - 1];
+  printf("%.1f%ciB", bytes / pow(1024, exponent), abbrev);
 }
 }
 
@@ -227,8 +242,39 @@ void Client::open(std::string host, in_port_t port, std::string path) {
 }
 
 void Client::progress(uint64_t bytes) {
-  complete += bytes;
+  auto now = uv_now(&loop);
+  if(stats.bytes == 0) {
+    stats.start_time = now;
+  }
+  stats.bytes += bytes;
+
   // cursor horizontal absolute 0 - erase in line - print
-  printf("\x1B[0G" "\x1B[K" "%.1f%%", 100.f * (double)complete / (double)file_size);
+  printf("\x1B[0G" "\x1B[K" "%.1f%%", 100.f * (double)stats.bytes / (double)file_size);
+
+  {
+    auto dt = now - stats.start_time;
+    if(dt != 0) {
+      printf(" - ");
+      print_bytes(stats.bytes / dt * 1000);
+      printf("/s = ");
+    }
+  }
+
+  bool first = true;
+  for(auto &conn : connections) {
+    if(conn.state == Connection::State::GET_COPY || conn.state == Connection::State::GET_DIRECT) {
+      auto dt = now - conn.stats.start_time;
+      if(dt != 0) {
+        if(!first) {
+          printf(" + ");
+        } else {
+          first = false;
+        }
+        print_bytes(conn.stats.bytes / dt * 1000);
+        printf("/s");
+      }
+    }
+  }
+
   fflush(stdout);
 }

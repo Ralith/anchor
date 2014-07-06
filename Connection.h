@@ -16,6 +16,11 @@ struct Chunk {
   size_t off, len;
 };
 
+struct Stats {
+  uint64_t start_time = 0;
+  uint64_t bytes = 0;
+};
+
 struct Connection {
   // Short-term operations <= IDLE for scheduling convenience
   enum class State { CONNECT, HEAD, IDLE, GET_HEADERS, GET_COPY, GET_DIRECT, FAILED, COMPLETE };
@@ -45,6 +50,7 @@ struct Connection {
   std::string header_data;
   uint8_t *begin = nullptr;
   uint8_t *end = nullptr;
+  Stats stats;
 
   Client &client;
   const std::string host_port;

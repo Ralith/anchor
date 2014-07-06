@@ -89,6 +89,8 @@ int headers_complete_cb(http_parser *parser) {
   if(connection.state == Connection::State::GET_HEADERS) {
     connection.state = Connection::State::GET_COPY;
   }
+  connection.stats.start_time = uv_now(&connection.client.loop);
+  connection.stats.bytes = 0;
   return connection.state == Connection::State::HEAD ? header_complete(parser) : 0;
 }
 
@@ -110,6 +112,7 @@ int body_cb(http_parser *parser, const char *at, size_t length) {
     memcpy(connection.begin, at, length);
   }
   connection.begin += length;
+  connection.stats.bytes += length;
   connection.client.progress(length);
 
   return 0;
