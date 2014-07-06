@@ -210,7 +210,7 @@ void connect_cb(uv_connect_t *req, int status) {
 
 bool Connection::head(uint64_t size) {
   if(client.file_size == ~0ULL) {
-    client.init_file(size);
+    client.file_size = size;
     return false;
   }
 

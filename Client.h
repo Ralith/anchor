@@ -69,7 +69,7 @@ struct Client {
 
   void ares_stage();
 
-  void init_file(uint64_t size);
+  void init_file();
 
   void open(std::string host, in_port_t port, std::string path);
 

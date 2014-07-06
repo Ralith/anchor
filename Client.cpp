@@ -147,8 +147,8 @@ void Client::ares_stage() {
   }
 }
 
-void Client::init_file(uint64_t size) {
-  file_size = size;
+void Client::init_file() {
+  assert(file_size != ~0UL);
   fd = ::open(file_name, O_RDWR | O_CREAT | O_EXCL, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
   if(fd == -1) {
     fprintf(stderr, "FATAL: Failed to open file %s for writing: %s\n", file_name, strerror(errno));
@@ -156,23 +156,26 @@ void Client::init_file(uint64_t size) {
   }
 
   {
-    int result = posix_fallocate(fd, 0, size);
+    int result = posix_fallocate(fd, 0, file_size);
     if(result != 0) {
-      fprintf(stderr, "FATAL: Couldn't allocate %lu bytes of file space for output: %s\n", size, strerror(result));
+      fprintf(stderr, "FATAL: Couldn't allocate %lu bytes of file space for output: %s\n", file_size, strerror(result));
     }
   }
 
-  file_data = static_cast<uint8_t *>(mmap(nullptr, size, PROT_WRITE, MAP_SHARED, fd, 0));
+  file_data = static_cast<uint8_t *>(mmap(nullptr, file_size, PROT_WRITE, MAP_SHARED, fd, 0));
   if(file_data == MAP_FAILED) {
     fprintf(stderr, "FATAL: mmap: %s\n", strerror(errno));
     abort();
   }
-  chunks.push_back(Chunk{0, size});
+  chunks.push_back(Chunk{0, file_size});
   schedule_work();
 }
 
 void Client::schedule_work() {
   balance_chunks();
+  if(file_data == nullptr) {
+    init_file();
+  }
 
   for(auto &conn : connections) {
     if(conn.state == Connection::State::IDLE) {
