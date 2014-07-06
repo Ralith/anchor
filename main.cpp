@@ -18,7 +18,7 @@
 
 int main(int argc, char **argv) {
   if(argc < 3) {
-    fprintf(stderr, "FAIL: Insufficient arguments\n");
+    fprintf(stderr, "Usage: %s <output file> <url>*\n", argv[0]);
     return 1;
   }
 
