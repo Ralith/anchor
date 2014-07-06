@@ -38,7 +38,9 @@ void query4_cb(void *arg, int status, int timeouts, unsigned char *abuf, int ale
   (void)timeouts;
   auto &res = *reinterpret_cast<Client::Resolution *>(arg);
   if(status != ARES_SUCCESS) {
-    fprintf(stderr, "WARN: DNS resolution failed: %s: %s\n", res.host.c_str(), ares_strerror(status));
+    if(status != ARES_EDESTRUCTION) {
+      fprintf(stderr, "WARN: DNS resolution failed: %s: %s\n", res.host.c_str(), ares_strerror(status));
+    }
     return;
   }
   assert(abuf != nullptr && alen != 0);
@@ -63,7 +65,9 @@ void query6_cb(void *arg, int status, int timeouts, unsigned char *abuf, int ale
   (void)timeouts;
   auto &res = *reinterpret_cast<Client::Resolution *>(arg);
   if(status != ARES_SUCCESS) {
-    fprintf(stderr, "WARN: DNS resolution failed: %s: %s\n", res.host.c_str(), ares_strerror(status));
+    if(status != ARES_EDESTRUCTION) {
+      fprintf(stderr, "WARN: DNS resolution failed: %s: %s\n", res.host.c_str(), ares_strerror(status));
+    }
     return;
   }
   assert(abuf != nullptr && alen != 0);
@@ -145,9 +149,9 @@ void Client::ares_stage() {
 
 void Client::init_file(uint64_t size) {
   file_size = size;
-  fd = ::open(file_name.c_str(), O_RDWR | O_CREAT | O_EXCL, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+  fd = ::open(file_name, O_RDWR | O_CREAT | O_EXCL, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
   if(fd == -1) {
-    fprintf(stderr, "FATAL: Failed to open file %s for writing: %s\n", file_name.c_str(), strerror(errno));
+    fprintf(stderr, "FATAL: Failed to open file %s for writing: %s\n", file_name, strerror(errno));
     exit(1);
   }
 

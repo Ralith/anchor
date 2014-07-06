@@ -11,18 +11,35 @@
 #include "Connection.h"
 #include "Client.h"
 #include "Util.h"
+#include "Options.h"
 
 #if UV_VERSION_MAJOR != 0 || UV_VERSION_MINOR != 11
 #error unsupported libuv version
 #endif
 
+enum OptionId {
+  OUTPUT,
+  USER_AGENT
+};
+
+const std::vector<Option::Specifier> options({
+    {OUTPUT, "output", 'o', "path", Option::Type::STRING, "file to write"},
+    {USER_AGENT, "user-agent", 'u', "user agent", Option::Type::STRING, "user-agent to transmit to the server"},
+  });
+
+void usage(const char *name) {
+  fprintf(stderr, "Usage: %s [options] <url>*\nOptions:\n", name);
+  print_options(options);
+}
+
 int main(int argc, char **argv) {
-  if(argc < 3) {
-    fprintf(stderr, "Usage: %s <output file> <url>*\n", argv[0]);
+  if(argc < 2) {
+    usage(argv[0]);
     return 1;
   }
 
   Client client;
+
   if(int err = client.ares.start()) {
     fprintf(stderr, "FATAL: c-ares: %s\n", ares_strerror(err));
     return 2;
@@ -33,31 +50,55 @@ int main(int argc, char **argv) {
     return 3;
   }
 
-  client.file_name = argv[1];
+  for(const auto &param : parse_options(argc, argv, options)) {
+    switch(param.id) {
+    case OUTPUT:
+      client.file_name = param.parameter.string;
+      break;
 
-  for(int i = 2; i < argc; ++i) {
-    const char *url_str = argv[i];
-    Url url(url_str);
+    case USER_AGENT:
+      client.user_agent = param.parameter.string;
+      break;
 
-    if(url.scheme.base != nullptr &&
-       url.scheme.len != 4 &&
-       0 != strncmp(url.scheme.base, "http", url.scheme.len)) {
-      fprintf(stderr, "WARN: Skipping non-http URL %s\n", url_str);
-      continue;
+    default: {
+      const char *url_str = param.parameter.string;
+      Url url(url_str);
+
+      if(url.scheme.base != nullptr &&
+         url.scheme.len != 4 &&
+         0 != strncmp(url.scheme.base, "http", url.scheme.len)) {
+        fprintf(stderr, "WARN: Skipping non-http URL %s\n", url_str);
+        continue;
+      }
+
+      if(url.host.base == nullptr || url.host.len == 0) {
+        fprintf(stderr, "WARN: Skipping URL missing host %s\n(did you forget the leading \"//\"?)\n", url_str);
+        continue;
+      }
+
+      const in_port_t port = url.port.base == nullptr ? 80 : strtol(url.port.base, nullptr, 10);
+      if(port == 0) {
+        fprintf(stderr, "WARN: Skipping URL with invalid port: %s\n", url_str);
+        continue;
+      }
+      std::string path = url.path.base != nullptr ? std::string(url.path.base, url.path.len) : "/";
+      client.open(std::string(url.host.base, url.host.len), port, std::move(path));
+
+      if(client.file_name == nullptr && url.path.base != nullptr && url.path.len != 0) {
+        client.file_name = url.path.base;
+        for(const char *ch = url.path.base; ch != url.path.base + url.path.len - 1; ++ch) {
+          if(*ch == '/') client.file_name = ch+1;
+        }
+      }
+      break;
     }
-
-    if(url.host.base == nullptr || url.host.len == 0) {
-      fprintf(stderr, "WARN: Skipping URL missing host %s\n(did you forget the leading \"//\"?)\n", url_str);
-      continue;
     }
+  }
 
-    const in_port_t port = url.port.base == nullptr ? 80 : strtol(url.port.base, nullptr, 10);
-    if(port == 0) {
-      fprintf(stderr, "WARN: Skipping URL with invalid port: %s\n", url_str);
-      continue;
-    }
-    std::string path = url.path.base != nullptr ? std::string(url.path.base, url.path.len) : "/";
-    client.open(std::string(url.host.base, url.host.len), port, std::move(path));
+  if(client.file_name == nullptr) {
+    fprintf(stderr, "Output filename must be specified!\n");
+    usage(argv[0]);
+    return 4;
   }
 
   client.ares_stage();

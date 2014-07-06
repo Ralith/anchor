@@ -89,7 +89,8 @@ struct Client {
   std::deque<Connection> connections;
   std::vector<Chunk> chunks;
 
-  std::string file_name;
+  const char *file_name = nullptr;
+  const char *user_agent = "Mozilla/5.0 (X11; Linux x86_64; rv:29.0) Gecko/20100101 Firefox/29.0";
   uint64_t file_size = ~0;
   int fd = -1;
   uint8_t *file_data = nullptr;

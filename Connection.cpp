@@ -187,7 +187,7 @@ void connect_cb(uv_connect_t *req, int status) {
 
   connection.state = Connection::State::HEAD;
 
-  uv_buf_t bufs[5];
+  uv_buf_t bufs[7];
   bufs[0].base = const_cast<char *>("HEAD ");
   bufs[0].len = strlen(bufs[0].base);
   bufs[1].base = const_cast<char *>(connection.path.data());
@@ -196,8 +196,12 @@ void connect_cb(uv_connect_t *req, int status) {
   bufs[2].len = strlen(bufs[2].base);
   bufs[3].base = const_cast<char *>(connection.host_port.data());
   bufs[3].len = connection.host_port.size();
-  bufs[4].base = const_cast<char *>("\r\nConnection: keep-alive\r\n\r\n");
+  bufs[4].base = const_cast<char *>("\r\nUser-Agent: ");
   bufs[4].len = strlen(bufs[4].base);
+  bufs[5].base = const_cast<char *>(connection.client.user_agent);
+  bufs[5].len = strlen(bufs[5].base);
+  bufs[6].base = const_cast<char *>("\r\nConnection: keep-alive\r\n\r\n");
+  bufs[6].len = strlen(bufs[6].base);
 
   uv_write(&connection.write_req, reinterpret_cast<uv_stream_t *>(&connection.handle), bufs, elementsof(bufs), write_cb);
   uv_read_start(reinterpret_cast<uv_stream_t *>(&connection.handle), alloc_cb, read_cb);
@@ -255,6 +259,7 @@ void Connection::get(Chunk chunk) {
           << "Host: " << host_port << "\r\n"
           << "Range: bytes=" << begin - client.file_data
           << "-" << end - client.file_data - 1 << "\r\n"
+          << "User-Agent: " << client.user_agent << "\r\n"
           << "Connection: keep-alive\r\n"
           << "\r\n";
   get_req = builder.str();
