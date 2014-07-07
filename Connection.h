@@ -46,8 +46,6 @@ struct Connection {
   State state = State::CONNECT;
   http_parser parser;
   std::string status;
-  std::string header_name;
-  std::string header_data;
   uint8_t *begin = nullptr;
   uint8_t *end = nullptr;
   Stats stats;

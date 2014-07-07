@@ -49,39 +49,18 @@ int message_complete_cb(http_parser *parser) {
 
 int header_complete(http_parser *parser) {
   auto &connection = *reinterpret_cast<Connection *>(parser->data);
-  if(connection.header_name == "Content-Length") {
-    char *endptr;
-    uint64_t size = strtoll(connection.header_data.c_str(), &endptr, 10);
-    if(endptr == connection.header_data.c_str() + connection.header_data.size()) {
-      if(connection.head(size)) {
-        fprintf(stderr, "WARN: %s served file of %lu bytes, expected %lu bytes\n", connection.host.c_str(), size,
-                connection.client.file_size);
-        connection.state = Connection::State::FAILED;
-        connection.close();
-      }
-    } else {
-      fprintf(stderr, "WARN: Failed to parse Content-Length header\n");
+  if(parser->content_length != 0) {
+    if(connection.head(parser->content_length)) {
+      fprintf(stderr, "WARN: %s served file of %lu bytes, expected %lu bytes\n", connection.host.c_str(), parser->content_length,
+              connection.client.file_size);
+      connection.state = Connection::State::FAILED;
+      connection.close();
     }
+  } else {
+    fprintf(stderr, "WARN: Failed to parse Content-Length header\n");
   }
-  connection.header_name.clear();
-  connection.header_data.clear();
 
   return 1;
-}
-
-int header_field_cb(http_parser *parser, const char *at, size_t length) {
-  auto &connection = *reinterpret_cast<Connection *>(parser->data);
-  if(!connection.header_data.empty()) {
-    header_complete(parser);
-  }
-  connection.header_name += std::string(at, length);
-  return 0;
-}
-
-int header_value_cb(http_parser *parser, const char *at, size_t length) {
-  auto &connection = *reinterpret_cast<Connection *>(parser->data);
-  connection.header_data += std::string(at, length);
-  return 0;
 }
 
 int headers_complete_cb(http_parser *parser) {
@@ -134,10 +113,6 @@ void read_cb(uv_stream_t* stream,
   settings.on_status = status_cb;
   settings.on_message_complete = message_complete_cb;
   settings.on_headers_complete = headers_complete_cb;
-  if(connection.state == Connection::State::HEAD) {
-    settings.on_header_field = header_field_cb;
-    settings.on_header_value = header_value_cb;
-  }
   settings.on_body = body_cb;
   auto parsed = http_parser_execute(&connection.parser, &settings, buf->base, nread == UV__EOF ? 0 : nread);
   auto http_errno = HTTP_PARSER_ERRNO(&connection.parser);
