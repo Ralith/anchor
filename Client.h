@@ -53,6 +53,7 @@ struct Client {
   };
 
   struct Resolution {
+    const std::string req_host;
     const std::string host;
     const in_port_t port;
     const std::string path;
@@ -71,7 +72,7 @@ struct Client {
 
   void init_file();
 
-  void open(std::string host, in_port_t port, std::string path);
+  void open(std::string req_host, std::string host, in_port_t port, std::string path);
 
   void progress(uint64_t bytes);
 

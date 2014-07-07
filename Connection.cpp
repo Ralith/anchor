@@ -31,12 +31,13 @@ void write_cb(uv_write_t* req, int status);
 
 int message_complete_cb(http_parser *parser) {
   auto &connection = *reinterpret_cast<Connection *>(parser->data);
+  printf("%u\n", parser->status_code);
   if((connection.state == Connection::State::HEAD && parser->status_code != 200) ||
      ((connection.state == Connection::State::GET_HEADERS ||
        connection.state == Connection::State::GET_COPY ||
        connection.state == Connection::State::GET_DIRECT)
       && parser->status_code != 206)) {
-    fprintf(stderr, "WARN: Abandoning connection to %s due to HTTP %u %s\n", connection.host_port.c_str(), parser->status_code, connection.status.c_str());
+    fprintf(stderr, "WARN: Abandoning connection to %s due to HTTP %u %s\n", connection.host.c_str(), parser->status_code, connection.status.c_str());
     connection.state = Connection::State::FAILED;
     connection.close();
     return 0;
@@ -54,7 +55,7 @@ int header_complete(http_parser *parser) {
     uint64_t size = strtoll(connection.header_data.c_str(), &endptr, 10);
     if(endptr == connection.header_data.c_str() + connection.header_data.size()) {
       if(connection.head(size)) {
-        fprintf(stderr, "WARN: %s served file of %lu bytes, expected %lu bytes\n", connection.host_port.c_str(), size,
+        fprintf(stderr, "WARN: %s served file of %lu bytes, expected %lu bytes\n", connection.host.c_str(), size,
                 connection.client.file_size);
         connection.state = Connection::State::FAILED;
         connection.close();
@@ -123,7 +124,7 @@ void read_cb(uv_stream_t* stream,
              const uv_buf_t* buf) {
   auto &connection = *reinterpret_cast<Connection *>(stream);
   if(nread < 0 && nread != UV__EOF) {
-    fprintf(stderr, "WARN: Closing connection to %s due to read error: %s\n", connection.host_port.c_str(),
+    fprintf(stderr, "WARN: Closing connection to %s due to read error: %s\n", connection.host.c_str(),
             uv_strerror(nread));
     connection.state = Connection::State::FAILED;
     connection.close();
@@ -168,7 +169,7 @@ void read_cb(uv_stream_t* stream,
 void write_cb(uv_write_t* req, int status) {
   auto &connection = *reinterpret_cast<Connection *>(req->data);
   if(status < 0) {
-    fprintf(stderr, "WARN: Failed to send HTTP request to %s: %s\n", connection.host_port.c_str(), uv_strerror(status));
+    fprintf(stderr, "WARN: Failed to send HTTP request to %s: %s\n", connection.host.c_str(), uv_strerror(status));
     connection.state = Connection::State::FAILED;
     connection.close();
     return;
@@ -179,7 +180,7 @@ void connect_cb(uv_connect_t *req, int status) {
   auto &connection = *reinterpret_cast<Connection *>(req->data);
 
   if(status < 0) {
-    fprintf(stderr, "WARN: Connection to %s failed: %s\n", connection.host_port.c_str(), uv_strerror(status));
+    fprintf(stderr, "WARN: Connection to %s failed: %s\n", connection.host.c_str(), uv_strerror(status));
     connection.state = Connection::State::FAILED;
     connection.close();
     return;
@@ -194,8 +195,8 @@ void connect_cb(uv_connect_t *req, int status) {
   bufs[1].len = connection.path.size();
   bufs[2].base = const_cast<char *>(" HTTP/1.1\r\nHost: ");
   bufs[2].len = strlen(bufs[2].base);
-  bufs[3].base = const_cast<char *>(connection.host_port.data());
-  bufs[3].len = connection.host_port.size();
+  bufs[3].base = const_cast<char *>(connection.host.data());
+  bufs[3].len = connection.host.size();
   bufs[4].base = const_cast<char *>("\r\nUser-Agent: ");
   bufs[4].len = strlen(bufs[4].base);
   bufs[5].base = const_cast<char *>(connection.client.user_agent);
@@ -256,7 +257,7 @@ void Connection::get(Chunk chunk) {
 
   std::ostringstream builder;
   builder << "GET " << path << " HTTP/1.1\r\n"
-          << "Host: " << host_port << "\r\n"
+          << "Host: " << host << "\r\n"
           << "Range: bytes=" << begin - client.file_data
           << "-" << end - client.file_data - 1 << "\r\n"
           << "User-Agent: " << client.user_agent << "\r\n"

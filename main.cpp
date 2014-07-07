@@ -82,7 +82,8 @@ int main(int argc, char **argv) {
         continue;
       }
       std::string path = url.path.base != nullptr ? std::string(url.path.base, url.path.len) : "/";
-      client.open(std::string(url.host.base, url.host.len), port, std::move(path));
+      client.open(std::string(url.host.base, url.host.len) + (url.port.base ? ":" + std::string(url.port.base, url.port.len) : ""),
+                  std::string(url.host.base, url.host.len), port, std::move(path));
 
       if(client.file_name == nullptr && url.path.base != nullptr && url.path.len != 0) {
         client.file_name = url.path.base;

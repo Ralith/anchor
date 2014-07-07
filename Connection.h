@@ -25,7 +25,7 @@ struct Connection {
   // Short-term operations <= IDLE for scheduling convenience
   enum class State { CONNECT, HEAD, IDLE, GET_HEADERS, GET_COPY, GET_DIRECT, FAILED, COMPLETE };
 
-  Connection(Client &s, std::string h, std::string p) : client(s), host_port(std::move(h)), path(std::move(p)) {
+  Connection(Client &s, std::string h, std::string p) : client(s), host(std::move(h)), path(std::move(p)) {
     connect_req.data = this;
     write_req.data = this;
     http_parser_init(&parser, HTTP_RESPONSE);
@@ -53,7 +53,7 @@ struct Connection {
   Stats stats;
 
   Client &client;
-  const std::string host_port;
+  const std::string host;
   const std::string path;
 };
 

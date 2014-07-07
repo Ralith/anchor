@@ -56,7 +56,7 @@ void query4_cb(void *arg, int status, int timeouts, unsigned char *abuf, int ale
     return;
   }
 
-  res.client.connections.emplace_back(res.client, res.host + ":" + std::to_string(res.port), res.path);
+  res.client.connections.emplace_back(res.client, res.req_host, res.path);
   uv_tcp_init(&res.client.loop, &res.client.connections.back().handle);
   res.client.connections.back().connect(addrs[0].ipaddr, res.port);
 }
@@ -240,9 +240,9 @@ void Client::balance_chunks() {
   }
 }
 
-void Client::open(std::string host, in_port_t port, std::string path) {
+void Client::open(std::string req_host, std::string host, in_port_t port, std::string path) {
   resolutions.emplace_back(
-    Resolution{std::move(host), port, std::move(path), *this});
+    Resolution{std::move(req_host), std::move(host), port, std::move(path), *this});
   ares_query(dns.channel, resolutions.back().host.c_str(), ns_c_in, ns_t_a, query4_cb, &resolutions.back());
   //ares_query(dns.channel, resolutions.back().host.c_str(), ns_c_in, ns_t_aaaa, query6_cb, &resolutions.back());
   (void)query6_cb;

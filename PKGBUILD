@@ -1,6 +1,6 @@
 # Maintainer: Benjamin Saunders <ben.e.saunders@gmail.com>
 pkgname="anchor"
-pkgver=0.0.13
+pkgver=0.0.15
 pkgrel=1
 pkgdesc="Multi-connection HTTP file downloading utility"
 arch=('i686' 'x86_64')
