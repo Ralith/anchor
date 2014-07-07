@@ -51,6 +51,7 @@ std::vector<Option> parse_options(int argc, char *argv[], const std::vector<Opti
         default:
           abort();
         }
+        break;
       }
     }
   }

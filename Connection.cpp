@@ -31,7 +31,6 @@ void write_cb(uv_write_t* req, int status);
 
 int message_complete_cb(http_parser *parser) {
   auto &connection = *reinterpret_cast<Connection *>(parser->data);
-  printf("%u\n", parser->status_code);
   if((connection.state == Connection::State::HEAD && parser->status_code != 200) ||
      ((connection.state == Connection::State::GET_HEADERS ||
        connection.state == Connection::State::GET_COPY ||

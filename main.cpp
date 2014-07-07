@@ -1,4 +1,5 @@
 #include <string>
+#include <algorithm>
 
 #include <cstdio>
 #include <cstring>
@@ -38,7 +39,48 @@ int main(int argc, char **argv) {
     return 1;
   }
 
+  std::vector<Url> urls;
+  urls.reserve(argc-1);
+  const char *path = nullptr, *user_agent = "Mozilla/5.0 (X11; Linux x86_64; rv:29.0) Gecko/20100101 Firefox/29.0";
+  for(const auto &param : parse_options(argc, argv, options)) {
+    switch(param.id) {
+    case OUTPUT:
+      path = param.parameter.string;
+      break;
+
+    case USER_AGENT:
+      user_agent = param.parameter.string;
+      break;
+
+    default: {
+      urls.emplace_back(param.parameter.string);
+      const auto &url = urls.back();
+      if(path == nullptr && url.path.base != nullptr && url.path.len != 0) {
+        path = url.path.base;
+        for(const char *ch = url.path.base; ch != url.path.base + url.path.len - 1; ++ch) {
+          if(*ch == '/') path = ch+1;
+        }
+      }
+      break;
+    }
+    }
+  }
+
+  if(path == nullptr) {
+    fprintf(stderr, "Output filename could not be guessed and must be specified!\n");
+    usage(argv[0]);
+    return 4;
+  }
+
+  if(urls.empty()) {
+    fprintf(stderr, "No URLs provided!\n");
+    usage(argv[0]);
+    return 5;
+  }
+
   Client client;
+  client.file_name = path;
+  client.user_agent = user_agent;
 
   if(int err = client.ares.start()) {
     fprintf(stderr, "FATAL: c-ares: %s\n", ares_strerror(err));
@@ -50,61 +92,39 @@ int main(int argc, char **argv) {
     return 3;
   }
 
-  for(const auto &param : parse_options(argc, argv, options)) {
-    switch(param.id) {
-    case OUTPUT:
-      client.file_name = param.parameter.string;
-      break;
-
-    case USER_AGENT:
-      client.user_agent = param.parameter.string;
-      break;
-
-    default: {
-      const char *url_str = param.parameter.string;
-      Url url(url_str);
-
-      if(url.scheme.base != nullptr &&
-         url.scheme.len != 4 &&
-         0 != strncmp(url.scheme.base, "http", url.scheme.len)) {
-        fprintf(stderr, "WARN: Skipping non-http URL %s\n", url_str);
-        continue;
-      }
-
-      if(url.host.base == nullptr || url.host.len == 0) {
-        fprintf(stderr, "WARN: Skipping URL missing host %s\n(did you forget the leading \"//\"?)\n", url_str);
-        continue;
-      }
-
-      const in_port_t port = url.port.base == nullptr ? 80 : strtol(url.port.base, nullptr, 10);
-      if(port == 0) {
-        fprintf(stderr, "WARN: Skipping URL with invalid port: %s\n", url_str);
-        continue;
-      }
-      std::string path = url.path.base != nullptr ? std::string(url.path.base, url.path.len) : "/";
-      client.open(std::string(url.host.base, url.host.len) + (url.port.base ? ":" + std::string(url.port.base, url.port.len) : ""),
-                  std::string(url.host.base, url.host.len), port, std::move(path));
-
-      if(client.file_name == nullptr && url.path.base != nullptr && url.path.len != 0) {
-        client.file_name = url.path.base;
-        for(const char *ch = url.path.base; ch != url.path.base + url.path.len - 1; ++ch) {
-          if(*ch == '/') client.file_name = ch+1;
-        }
-      }
-      break;
+  for(const auto &url : urls) {
+    if(url.scheme.base != nullptr &&
+       url.scheme.len != 4 &&
+       0 != strncmp(url.scheme.base, "http", url.scheme.len)) {
+      fprintf(stderr, "WARN: Skipping url with non-http scheme %s\n", std::string(url.scheme.base, url.scheme.len).c_str());
+      continue;
     }
-    }
-  }
 
-  if(client.file_name == nullptr) {
-    fprintf(stderr, "Output filename must be specified!\n");
-    usage(argv[0]);
-    return 4;
+    if(url.host.base == nullptr || url.host.len == 0) {
+      fprintf(stderr, "WARN: Skipping URL with no host component\n(did you forget the leading \"//\"?)\n");
+      continue;
+    }
+
+    const in_port_t port = url.port.base == nullptr ? 80 : strtol(url.port.base, nullptr, 10);
+    if(port == 0) {
+      fprintf(stderr, "WARN: Skipping URL with invalid port: %s\n", std::string(url.port.base, url.port.len).c_str());
+      continue;
+    }
+    std::string path = url.path.base != nullptr ? std::string(url.path.base, url.path.len) : "/";
+    client.open(std::string(url.host.base, url.host.len) + (url.port.base ? ":" + std::string(url.port.base, url.port.len) : ""),
+                std::string(url.host.base, url.host.len), port, std::move(path));
   }
 
   client.ares_stage();
 
   uv_run(&client.loop, UV_RUN_DEFAULT);
+
+  if(std::any_of(client.connections.begin(), client.connections.end(),
+                 [](const Connection &c) { return c.state != Connection::State::COMPLETE; })) {
+    fprintf(stderr, "Download failed!\n");
+    return -1;
+  }
+
   puts("");
 
   return 0;
