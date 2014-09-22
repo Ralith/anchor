@@ -7,6 +7,7 @@
 
 #include "Client.h"
 #include "Util.h"
+#include "Url.h"
 
 namespace {
 void alloc_cb(uv_handle_t* handle,
@@ -47,8 +48,57 @@ int message_complete_cb(http_parser *parser) {
   return 1;
 }
 
-int header_complete(http_parser *parser) {
+int headers_complete_cb(http_parser *parser) {
   auto &connection = *reinterpret_cast<Connection *>(parser->data);
+
+  if(!connection.header_name.empty()) {
+    connection.process_header(connection.header_name, connection.header_value);
+    connection.header_name.clear();
+    connection.header_value.clear();
+  }
+
+  if(!connection.redirect.empty()) {
+    connection.close();
+
+    Url url(connection.redirect.c_str());
+
+    if(url.scheme.base != nullptr &&
+       url.scheme.len != 4 &&
+       0 != strncmp(url.scheme.base, "http", url.scheme.len)) {
+      fprintf(stderr, "WARN: Ignoring redirect URL with non-http scheme %s\n", std::string(url.scheme.base, url.scheme.len).c_str());
+      return 0;
+    }
+
+    if(url.host.base == nullptr || url.host.len == 0) {
+      fprintf(stderr, "WARN: Ignoring redirect URL with no host component\n(did you forget the leading \"//\"?)\n");
+      return 0;
+    }
+
+    const in_port_t port = url.port.base == nullptr ? 80 : strtol(url.port.base, nullptr, 10);
+    if(port == 0) {
+      fprintf(stderr, "WARN: Ignoring redirect URL with invalid port: %s\n", std::string(url.port.base, url.port.len).c_str());
+      return 0;
+    }
+
+    std::string path = url.path.base != nullptr ? std::string(url.path.base, url.path.len) : "/";
+    connection.client.open(std::string(url.host.base, url.host.len) + (url.port.base ? ":" + std::string(url.port.base, url.port.len) : ""),
+                           std::string(url.host.base, url.host.len),
+                           port,
+                           std::move(path));
+
+    return 0;
+  }
+
+  if(connection.state == Connection::State::GET_HEADERS) {
+    connection.state = Connection::State::GET_COPY;
+  }
+  connection.stats.start_time = uv_now(&connection.client.loop);
+  connection.stats.bytes = 0;
+
+  if(connection.state != Connection::State::HEAD) {
+    return 0;
+  }
+
   if(parser->content_length != 0) {
     if(connection.head(parser->content_length)) {
       fprintf(stderr, "WARN: %s served file of %lu bytes, expected %lu bytes\n", connection.host.c_str(), parser->content_length,
@@ -61,16 +111,6 @@ int header_complete(http_parser *parser) {
   }
 
   return 1;
-}
-
-int headers_complete_cb(http_parser *parser) {
-  auto &connection = *reinterpret_cast<Connection *>(parser->data);
-  if(connection.state == Connection::State::GET_HEADERS) {
-    connection.state = Connection::State::GET_COPY;
-  }
-  connection.stats.start_time = uv_now(&connection.client.loop);
-  connection.stats.bytes = 0;
-  return connection.state == Connection::State::HEAD ? header_complete(parser) : 0;
 }
 
 int status_cb(http_parser *parser, const char *at, size_t length) {
@@ -97,10 +137,28 @@ int body_cb(http_parser *parser, const char *at, size_t length) {
   return 0;
 }
 
+int header_field_cb(http_parser *parser, const char *at, size_t length) {
+  auto &connection = *reinterpret_cast<Connection *>(parser->data);
+  if(!connection.header_value.empty()) {
+    connection.process_header(connection.header_name, connection.header_value);
+    connection.header_name.clear();
+    connection.header_value.clear();
+  }
+  connection.header_name += std::string(at, length);
+  return 0;
+}
+
+int header_value_cb(http_parser *parser, const char *at, size_t length) {
+  auto &connection = *reinterpret_cast<Connection *>(parser->data);
+  connection.header_value += std::string(at, length);
+  return 0;
+}
+
 void read_cb(uv_stream_t* stream,
              ssize_t nread,
              const uv_buf_t* buf) {
   auto &connection = *reinterpret_cast<Connection *>(stream);
+
   if(nread < 0 && nread != UV__EOF) {
     fprintf(stderr, "WARN: Closing connection to %s due to read error: %s\n", connection.host.c_str(),
             uv_strerror(nread));
@@ -113,6 +171,8 @@ void read_cb(uv_stream_t* stream,
   settings.on_status = status_cb;
   settings.on_message_complete = message_complete_cb;
   settings.on_headers_complete = headers_complete_cb;
+  settings.on_header_field = header_field_cb;
+  settings.on_header_value = header_value_cb;
   settings.on_body = body_cb;
   auto parsed = http_parser_execute(&connection.parser, &settings, buf->base, nread == UV__EOF ? 0 : nread);
   auto http_errno = HTTP_PARSER_ERRNO(&connection.parser);
@@ -244,4 +304,23 @@ void Connection::get(Chunk chunk) {
   buf.len = get_req.size();
 
   uv_write(&write_req, reinterpret_cast<uv_stream_t *>(&handle), &buf, 1, write_cb);
+}
+
+void Connection::process_header(const std::string &name, const std::string &value) {
+  switch(parser.status_code) {
+  case 301:
+  case 302:
+  case 303:
+  case 307:
+  case 308:
+    if(name != "Location") {
+      return;
+    }
+
+    redirect = value;
+    break;
+
+  default:
+    break;
+  }
 }

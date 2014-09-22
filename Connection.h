@@ -53,6 +53,13 @@ struct Connection {
   Client &client;
   const std::string host;
   const std::string path;
+
+  std::string header_name;
+  std::string header_value;
+
+  std::string redirect;
+
+  void process_header(const std::string &name, const std::string &value);
 };
 
 #endif
